@@ -19,7 +19,7 @@
 		3AA595C70315837590C10BC0 /* WebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebView.swift; sourceTree = "<group>"; };
 		3F4037811A1CDF11DD51E2BC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4BB1F1F7E5ADC8B54A3C90FE /* focus.user.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = focus.user.js; sourceTree = "<group>"; };
-		518695297D7BAE60F854EF81 /* Focus.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Focus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		518695297D7BAE60F854EF81 /* focus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = focus.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		72C8D2DE4366D55AEB12F26B /* FocusRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusRules.swift; sourceTree = "<group>"; };
 		AEB1E0DF596D4D1001E72A0D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E96ECBFA840ED34AFE459266 /* FocusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusApp.swift; sourceTree = "<group>"; };
@@ -50,7 +50,7 @@
 		9EBF9967978A0245C0BE6BE1 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				518695297D7BAE60F854EF81 /* Focus.app */,
+				518695297D7BAE60F854EF81 /* focus.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,7 +73,7 @@
 			packageProductDependencies = (
 			);
 			productName = Focus;
-			productReference = 518695297D7BAE60F854EF81 /* Focus.app */;
+			productReference = 518695297D7BAE60F854EF81 /* focus.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -142,9 +142,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J7Y338CS7Q;
 				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.atleyma.focus;
 				PRODUCT_NAME = focus;
 				SDKROOT = iphoneos;
@@ -159,9 +163,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J7Y338CS7Q;
 				INFOPLIST_FILE = Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.atleyma.focus;
 				PRODUCT_NAME = focus;
 				SDKROOT = iphoneos;

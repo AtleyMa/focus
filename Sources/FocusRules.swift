@@ -32,7 +32,7 @@ enum FocusRules {
 
     private static func bundledScript() -> String {
         guard
-            let url = Bundle.main.url(forResource: "focus", withExtension: "js"),
+            let url = Bundle.main.url(forResource: "focus.user", withExtension: "js"),
             let text = try? String(contentsOf: url, encoding: .utf8)
         else { return "" }
         return text

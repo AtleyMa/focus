@@ -2,8 +2,10 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        FocusWebView()
-            .ignoresSafeArea()
+        ZStack {
+            Color.black.ignoresSafeArea()
+            FocusWebView()
+        }
     }
 }
 
