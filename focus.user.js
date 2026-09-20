@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         focus
 // @namespace    https://github.com/AtleyMa/focus
-// @version      0.2.0
-// @description  focus removes Reels, Explore, For You, suggested and sponsored posts from Instagram, leaving only your Following feed, stories and DMs. Runs in Safari (iPhone/macOS) via the Userscripts extension.
+// @version      0.3.0
+// @description  focus removes Reels/Explore/For You/suggestions/sponsored from Instagram, forces the Following feed, and locks any reel you open so you can't advance to another. Runs in Safari (iPhone/macOS) via the Userscripts extension.
 // @author       AtleyMa
 // @match        https://www.instagram.com/*
 // @match        https://m.instagram.com/*
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.2.0';
+  var VERSION = '0.3.0';
   var DEBUG = false;
 
   function log() {
@@ -24,10 +24,11 @@
   }
 
   /* ------------------------------------------------------------------
-   * 1. CSS — hide known structural entry points (fast, first paint).
+   * 1. CSS — hide entry points only. We intentionally do NOT hide
+   *    /reel/ links so reels sent in DMs stay tappable.
    * ------------------------------------------------------------------ */
   var CSS = [
-    'a[href="/reels/"], a[href="/explore/"], a[href*="/reel/"], a[href*="/reels/"] { display: none !important; }',
+    'a[href="/reels/"], a[href="/explore/"] { display: none !important; }',
     'nav a[href="/reels/"], nav a[href="/explore/"] { display: none !important; }',
     '[role="tablist"] a[href*="/reels/"], [role="tablist"] a[href*="/explore/"], [role="tab"] a[href*="/reels/"] { display: none !important; }',
     'header a[href*="/reels/"], header a[href*="/explore/"] { display: none !important; }',
@@ -63,13 +64,9 @@
 
   var BANNER_RE = /Open (the )?(Instagram )?(app|in the app)|Get the (Instagram )?app|Use the (Instagram )?app|Install the app/;
 
-  function isReelHref(href) {
-    href = (href || '');
-    return href.indexOf('/reel/') === 0 || href.indexOf('/reels/') === 0 || href === '/reels';
-  }
-
   /* ------------------------------------------------------------------
    * 3. Remove Reels posts from the feed (cards that link to /reel/).
+   *    Reels in DMs are NOT removed — those are tappable on purpose.
    * ------------------------------------------------------------------ */
   function purgeReelPosts() {
     var arts = document.querySelectorAll('article');
@@ -80,30 +77,7 @@
   }
 
   /* ------------------------------------------------------------------
-   * 4. Remove reel cards anywhere (DMs, search, profile grids): the
-   *    anchor is usually the whole card, so climb a couple of tight
-   *    wrapper levels and drop it, stopping before page-level nodes.
-   * ------------------------------------------------------------------ */
-  function removeReelCards() {
-    var links = document.querySelectorAll('a[href*="/reel/"], a[href*="/reels/"]');
-    for (var i = 0; i < links.length; i++) {
-      var node = links[i];
-      if (!node.parentNode) continue;
-      for (var lvl = 0; lvl < 3; lvl++) {
-        var p = node.parentElement;
-        if (!p) break;
-        if (p === document.body || p === document.documentElement) break;
-        if (p.matches && p.matches('main, [role="main"]')) break;
-        if (p.children.length > 4) break;   /* too big to be the card itself */
-        node = p;
-      }
-      removeEl(node);
-      log('removed reel card');
-    }
-  }
-
-  /* ------------------------------------------------------------------
-   * 5. Text-node scan — suggestion dividers, sponsored labels, banners.
+   * 4. Text-node scan — suggestion dividers, sponsored labels, banners.
    * ------------------------------------------------------------------ */
   function walkText(root) {
     var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -156,7 +130,7 @@
   }
 
   /* ------------------------------------------------------------------
-   * 6. Force the "Following" feed instead of "For You".
+   * 5. Force the "Following" feed instead of "For You".
    * ------------------------------------------------------------------ */
   function forceFollowing() {
     var tabs = document.querySelectorAll('[role="tab"], [role="tablist"] a, [role="tablist"] [role="button"]');
@@ -172,81 +146,122 @@
   }
 
   /* ------------------------------------------------------------------
-   * 7. Redirect Reels / Explore routes back to Home.
+   * 6. Reel lock.
+   *
+   *    Hard-banned routes (never allowed):
+   *        /reels/...  /explore/...
+   *    Single-reel viewing (allowed):
+   *        /reel/<id>  — open ONE reel, but the moment the viewer tries
+   *        to advance to any OTHER reel (next or prev), bounce back to
+   *        the original. Leaving to home/feed resets the lock.
    * ------------------------------------------------------------------ */
-  function redirectBadRoutes() {
+  var currentReel = null;
+  var bounceCooldown = false;
+
+  function reelIdFromPath(p) {
+    if (p.indexOf('/reel/') !== 0) return null;
+    var parts = p.split('/');
+    return parts[2] || null;
+  }
+
+  function hardRedirect() {
     var p = location.pathname;
-    if (p === '/reels/' || p.indexOf('/reel/') === 0 || p === '/explore/' || p === '/reels') {
+    if (p === '/reels/' || p === '/reels' || p === '/explore/') {
       log('redirecting', p, '-> /');
       location.replace('/');
+      return true;
+    }
+    return false;
+  }
+
+  function handleNavigation() {
+    if (hardRedirect()) { currentReel = null; return; }
+
+    var id = reelIdFromPath(location.pathname);
+    if (id) {
+      if (currentReel === null) {
+        currentReel = id;
+        log('reel lock: watching', id);
+      } else if (id !== currentReel) {
+        if (!bounceCooldown) {
+          bounceCooldown = true;
+          log('reel lock: bounce', id, '->', currentReel);
+          history.back();
+          setTimeout(function () {
+            bounceCooldown = false;
+            var now = reelIdFromPath(location.pathname);
+            if (now && now !== currentReel) {
+              log('reel lock: force back to', currentReel);
+              location.replace('/reel/' + currentReel);
+            }
+          }, 900);
+        }
+      }
+      hideReelControls();
+    } else {
+      currentReel = null;
     }
   }
 
-  /* ------------------------------------------------------------------
-   * 8. Click interceptor — stop reel/explore taps dead (capture phase),
-   *    including cards whose anchor is a descendant of the tap target.
-   * ------------------------------------------------------------------ */
-  document.addEventListener('click', function (e) {
-    var el = e.target;
-    for (var i = 0; i < 8 && el && el !== document; i++) {
-      if (el.tagName === 'A') {
-        if (isReelHref(el.getAttribute('href')) || el.getAttribute('href') === '/explore/') {
-          e.preventDefault();
-          e.stopPropagation();
-          log('blocked reel/explore click');
-          redirectBadRoutes();
-          return;
-        }
-        break;
+  /* Hide next/prev affordances + related-reel rails inside the viewer. */
+  function hideReelControls() {
+    ['[aria-label="Next"]', '[aria-label="Previous"]', '[aria-label="Next reel"]', '[aria-label="Previous reel"]']
+      .forEach(function (sel) {
+        document.querySelectorAll(sel).forEach(removeEl);
+      });
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    var node;
+    while ((node = walker.nextNode())) {
+      var t = clean(node.nodeValue);
+      if (t === 'More reels' || t === 'More videos' || t === 'See all reels' || t === 'Next reel') {
+        removeEl(node.parentElement);
       }
-      if (el.querySelector) {
-        var inner = el.querySelector('a[href*="/reel/"], a[href*="/reels/"]');
-        if (inner) {
-          e.preventDefault();
-          e.stopPropagation();
-          log('blocked click on container with reel link');
-          redirectBadRoutes();
-          return;
-        }
-      }
-      el = el.parentElement;
     }
-  }, true);
+  }
+
+  /* Best-effort: block vertical swipes on the reel video while a reel is
+   * open, so swipe-to-advance can't even start. */
+  document.addEventListener('touchmove', function (e) {
+    if (reelIdFromPath(location.pathname) === null) return;
+    var target = e.target;
+    if (!target || !target.closest) return;
+    if (target.closest('video')) {
+      e.preventDefault();
+    }
+  }, { passive: false, capture: true });
 
   /* ------------------------------------------------------------------
-   * 9. Catch SPA route changes instantly (reel viewer opens via
-   *    pushState without a full page load).
+   * 7. Catch SPA route changes instantly (reel viewer navigation happens
+   *    via pushState/replaceState without a full page load).
    * ------------------------------------------------------------------ */
   (function patchHistory() {
     var origPush = history.pushState;
     var origReplace = history.replaceState;
     history.pushState = function () {
       var r = origPush.apply(this, arguments);
-      redirectBadRoutes();
+      handleNavigation();
       return r;
     };
     history.replaceState = function () {
       var r = origReplace.apply(this, arguments);
-      redirectBadRoutes();
+      handleNavigation();
       return r;
     };
   })();
-  window.addEventListener('popstate', redirectBadRoutes);
+  window.addEventListener('popstate', handleNavigation);
 
   /* ------------------------------------------------------------------
-   * 10. Main loop — run now, then on an interval + scroll.
+   * 8. Main loop — run now, then on an interval + scroll.
    * ------------------------------------------------------------------ */
   var timer = null;
 
   function scan() {
-    if (document.body) {
-      redirectBadRoutes();
-      purgeReelPosts();
-      removeReelCards();
-      var hits = walkText(document.body);
-      for (var i = 0; i < hits.length; i++) handle(hits[i]);
-      forceFollowing();
-    }
+    if (!document.body) return;
+    handleNavigation();
+    purgeReelPosts();
+    var hits = walkText(document.body);
+    for (var i = 0; i < hits.length; i++) handle(hits[i]);
+    forceFollowing();
   }
 
   function start() {
