@@ -54,7 +54,8 @@ The web version has no push notifications, so to keep notifications exactly as b
 
 1. Native Instagram: **Settings → Notifications → keep only Messages** (or whatever you want to hear).
 2. **Settings → Screen Time → App Limits → Add Limit → Instagram → 1–5 minutes/day** → enable **Block at Limit**.
-3. Have a friend set a **Screen Time passcode** you don't know (so you can't tap "Ignore Limit").
+3. **Important:** when iOS asks **"Include Website Under Limit?"** tap **"Don't Include Website"** — otherwise the limit also applies to `instagram.com`, which is exactly what `focus` loads, and `focus` would get blocked too.
+4. Have a friend set a **Screen Time passcode** you don't know (so you can't tap "Ignore Limit").
 
 Notifications arrive exactly as today; the native app just can't be used for scrolling. You reply to DMs inside `focus`.
 
@@ -76,6 +77,7 @@ on every launch. When Instagram changes its markup:
 | Expired after 7 days | Re-run in Xcode, or set up AltStore/SideStore |
 | Reels / suggestions visible | Force-quit and reopen (fetches latest filter); if still broken, report it — Meta changed the markup |
 | Notifications stop | Combo A not applied yet — keep native IG + Screen Time limit |
+| Screen Time blocks `focus` too | Your Instagram limit includes the website — delete the limit, re-create it, choose **Don't Include Website** |
 | Login loop in webview | Log in in Safari first (`instagram.com`) so cookies/CSRF get set, then reopen `focus` |
 
 ## Project layout
