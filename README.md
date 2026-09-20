@@ -79,6 +79,7 @@ on every launch. When Instagram changes its markup:
 | Notifications stop | Combo A not applied yet — keep native IG + Screen Time limit |
 | Screen Time blocks `focus` too | Your Instagram limit includes the website — delete the limit, re-create it, choose **Don't Include Website** |
 | Login loop in webview | Log in in Safari first (`instagram.com`) so cookies/CSRF get set, then reopen `focus` |
+| Feels slow / janky | Update to the latest filter (v0.6.0+ uses a MutationObserver instead of constant full-page scans) — ⌘R reinstall |
 
 ## Project layout
 

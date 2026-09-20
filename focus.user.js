@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         focus
 // @namespace    https://github.com/AtleyMa/focus
-// @version      0.5.0
+// @version      0.6.0
 // @description  focus removes Reels/Explore/For You/suggestions/sponsored from Instagram, forces the Following feed, and locks any reel you open so you can't advance to another. Runs in Safari (iPhone/macOS) via the Userscripts extension.
 // @author       AtleyMa
 // @match        https://www.instagram.com/*
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.5.0';
+  var VERSION = '0.6.0';
   var DEBUG = false;
 
   function log() {
@@ -157,7 +157,9 @@
   /* ------------------------------------------------------------------
    * 5. Force the "Following" feed instead of "For You".
    * ------------------------------------------------------------------ */
+  var lastFollowClick = 0;
   function forceFollowing() {
+    if (Date.now() - lastFollowClick < 5000) return;
     var tabs = document.querySelectorAll('[role="tab"], [role="tablist"] a, [role="tablist"] [role="button"]');
     for (var i = 0; i < tabs.length; i++) {
       var tab = tabs[i];
@@ -165,6 +167,7 @@
       if (t !== 'Following') continue;
       if (tab.getAttribute('aria-selected') === 'true') return;
       log('switching to Following');
+      lastFollowClick = Date.now();
       tab.click();
       return;
     }
@@ -319,12 +322,27 @@
   window.addEventListener('popstate', handleNavigation);
 
   /* ------------------------------------------------------------------
-   * 8. Main loop — run now, then on an interval + scroll.
+   * 8. Scheduling — MutationObserver (debounced) does the real work so
+   *    we only scan when the DOM actually changes, plus a slow safety
+   *    net and a visibility guard. No more 1s full-page scans or
+   *    scan-per-scroll-event (those caused the jank).
    * ------------------------------------------------------------------ */
-  var timer = null;
+  var observer = null;
+  var safetyTimer = null;
+  var pendingScan = false;
+
+  function scheduleScan() {
+    if (pendingScan) return;
+    pendingScan = true;
+    setTimeout(function () {
+      pendingScan = false;
+      scan();
+    }, 120);
+  }
 
   function scan() {
     if (!document.body) return;
+    if (document.hidden) return;
     handleNavigation();
     purgeReelPosts();
     var hits = walkText(document.body);
@@ -336,8 +354,18 @@
   function start() {
     injectCSS();
     scan();
-    timer = setInterval(scan, 1000);
-    document.addEventListener('scroll', scan, { passive: true });
+    observer = new MutationObserver(scheduleScan);
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+    safetyTimer = setInterval(function () {
+      if (!document.hidden) scan();
+    }, 4000);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) scan();
+    });
     log('started v' + VERSION);
   }
 
