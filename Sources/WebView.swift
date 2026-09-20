@@ -2,7 +2,9 @@ import SwiftUI
 import WebKit
 
 struct FocusWebView: UIViewRepresentable {
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    var onScreenTimeBlocked: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onScreenTimeBlocked: onScreenTimeBlocked) }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -22,6 +24,8 @@ struct FocusWebView: UIViewRepresentable {
         webView.allowsBackForwardNavigationGestures = true
         webView.scrollView.bounces = true
 
+        context.coordinator.attach(webView)
+
         if let url = URL(string: "https://www.instagram.com/") {
             webView.load(URLRequest(url: url))
         }
@@ -31,6 +35,27 @@ struct FocusWebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     final class Coordinator: NSObject, WKNavigationDelegate {
+        private let onScreenTimeBlocked: (Bool) -> Void
+        private var webView: WKWebView?
+        private var timer: Timer?
+
+        init(onScreenTimeBlocked: @escaping (Bool) -> Void) {
+            self.onScreenTimeBlocked = onScreenTimeBlocked
+        }
+
+        func attach(_ webView: WKWebView) {
+            self.webView = webView
+            timer?.invalidate()
+            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self, let webView = self.webView else { return }
+                if #available(iOS 26.0, *) {
+                    self.onScreenTimeBlocked(webView.isBlockedByScreenTime)
+                }
+            }
+        }
+
+        deinit { timer?.invalidate() }
+
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
