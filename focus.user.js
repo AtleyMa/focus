@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         focus
 // @namespace    https://github.com/AtleyMa/focus
-// @version      0.4.0
+// @version      0.5.0
 // @description  focus removes Reels/Explore/For You/suggestions/sponsored from Instagram, forces the Following feed, and locks any reel you open so you can't advance to another. Runs in Safari (iPhone/macOS) via the Userscripts extension.
 // @author       AtleyMa
 // @match        https://www.instagram.com/*
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.4.0';
+  var VERSION = '0.5.0';
   var DEBUG = false;
 
   function log() {
@@ -48,7 +48,22 @@
    * ------------------------------------------------------------------ */
   function clean(t) { return (t || '').replace(/\s+/g, ' ').trim(); }
 
-  function removeEl(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+  function removeEl(el) {
+    /* Hide, don't destroy: Instagram is a React app and removing nodes it
+       owns throws "Something went wrong". display:none is safe. */
+    if (el && el.style) {
+      el.style.setProperty('display', 'none', 'important');
+      el.setAttribute('data-focus-hidden', '1');
+    }
+  }
+
+  function isHidden(el) {
+    for (var i = 0; i < 8 && el; i++) {
+      if (el.nodeType === 1 && el.hasAttribute('data-focus-hidden')) return true;
+      el = el.parentElement;
+    }
+    return false;
+  }
 
   var DIVIDERS = {
     'Suggested for you': true,
@@ -80,6 +95,7 @@
     var arts = document.querySelectorAll('article');
     for (var i = 0; i < arts.length; i++) {
       var a = arts[i];
+      if (a.hasAttribute('data-focus-hidden')) continue;
       if (a.querySelector('a[href*="/reel/"], a[href*="/reels/"]')) removeEl(a);
     }
   }
@@ -103,7 +119,7 @@
     var n = el;
     for (var i = 0; i < 8 && n; i++) {
       var st = window.getComputedStyle(n);
-      if (st.position === 'fixed' || st.position === 'absolute') { n.style.display = 'none'; return; }
+      if (st.position === 'fixed' || st.position === 'absolute') { removeEl(n); return; }
       n = n.parentElement;
     }
     removeEl(el);
@@ -124,7 +140,8 @@
   }
 
   function handle(el) {
-    if (!el || el.__focusHandled) return;
+    if (!el) return;
+    if (isHidden(el)) return;
     var t = clean(el.textContent);
 
     var art = el.closest ? el.closest('article') : null;
