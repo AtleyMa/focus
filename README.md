@@ -1,76 +1,97 @@
 # focus
 
-A free, auto-updating filter that strips the addictive parts out of Instagram: **Reels, Explore, For You, suggested posts, and sponsored posts** are gone. You keep your **Following feed, stories, DMs, and posting**.
+A free iOS app that is Instagram without the addiction: **Reels, Explore, For You, suggested posts, and sponsored posts are gone.** You keep your **Following feed, stories, DMs, and posting** — and notifications keep working.
 
-Runs on `instagram.com` in Safari on your iPhone (or Mac) using the free, open-source [Userscripts](https://github.com/quoid/userscripts) extension. No Xcode. No developer account. No subscription. $0.
+`focus` is a thin wrapper around `instagram.com` (the web version has full feed, stories, DMs, and posting) that injects a filter script removing the algorithmic surfaces. Same technique as paid apps (Dull, UNDOOMED) — but free and fully self-hosted.
 
-> **Why this works:** on a non-jailbroken iPhone, no app can modify the native Instagram app. So `focus` works on the *web* version of Instagram — which has full feed, stories, DMs, and posting — and surgically hides the algorithmic surfaces. Use the native app only as a locked-down DM inbox (see "Combo A" below).
-
----
-
-## Install on your iPhone (~10 minutes)
-
-1. **Install Userscripts** (free) from the App Store: <https://apps.apple.com/app/id1463298887>
-2. **Enable the extension:**
-   - Open **Settings → Safari → Extensions → Userscripts**
-   - Turn it **on**, and tap **Allow on All Websites** (or at minimum allow `instagram.com`).
-3. **Install the script:** in Safari, open
-   `https://raw.githubusercontent.com/AtleyMa/focus/main/focus.user.js`
-   - If you see the raw script text, that's normal. Tap the **extensions icon** (puzzle / "Aa") in the address bar, open **Userscripts**, and tap **Install** on the prompt.
-   - Alternative: open the Userscripts extension popup → **+ → New Remote** and paste the same URL.
-4. **Log in & verify:** open <https://www.instagram.com>, log in. Confirm:
-   - Feed shows only **Following** (no "For You" toggle, no Reels).
-   - No Reels link/tab anywhere, no Explore.
-   - No "Suggested for you" or sponsored posts.
-   - Stories and DMs still work.
-   - Tapping a shared `/reel/...` link redirects you to your Home feed.
-5. **Make it feel like an app:** in Safari, tap **Share → Add to Home Screen**, name it **focus**. It opens full-screen in its own tab.
-6. **Delete the native Instagram app** (or apply Combo A below to keep it as a locked DM inbox).
-
-> If you browse from macOS instead, the same script works in desktop Safari.
+- **Cost:** $0 (Xcode is free; signing uses your free Apple ID)
+- **No subscription, no dev account, no data leaves your phone**
+- **Auto-updating filters:** when Instagram changes its markup, the fix ships via the hosted `focus.user.js` and is picked up on next launch — no rebuild.
 
 ---
 
-## Combo A — keep DM notifications (recommended setup)
+## Requirements
 
-You lose native push notifications when you stop using the Instagram app. If you still want DM notifications, keep the native app but lock it down so it can't be used for scrolling:
+- A Mac with **Xcode** installed (free from the Mac App Store)
+- An iPhone running **iOS 16+**
+- Optionally **AltStore** or **SideStore** to avoid the 7-day re-signing chore
 
-1. In the native Instagram app: **Settings → Notifications → toggle everything OFF except Messages.**
-2. **Settings → Screen Time → App Limits → Add Limit → Instagram → 1–5 minutes/day**, and tap **Block at Limit**.
-3. Have a friend set a **Screen Time passcode** you don't know (Settings → Screen Time → Use Screen Time Passcode) so you can't tap "Ignore Limit".
+## Build & install (first time, ~15 minutes)
 
-Result: the native app becomes a DM inbox that self-locks after a minute. Your actual feed lives in `focus`.
+### 1. Set up the toolchain (one time)
+```bash
+sudo xcodebuild -license accept        # agree to Xcode license (needs your password)
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+brew install xcodegen                  # if you don't have it
+```
 
----
+### 2. Generate & open the project
+```bash
+xcodegen generate                      # creates Focus.xcodeproj from project.yml
+open Focus.xcodeproj
+```
 
-## Updating
+### 3. Sign & build to your iPhone
+1. In Xcode, select the **Focus** target → **Signing & Capabilities**.
+2. Check **Automatically manage signing**, choose **Team = your Apple ID** (free "Personal Team").
+3. Plug in your iPhone via USB, trust the computer.
+4. Set the run destination to your iPhone, press **Run (⌘R)**.
+5. If iOS complains, tap the app icon in Settings to trust the developer: **Settings → General → VPN & Device Management** → tap the Apple ID → **Trust**.
 
-`focus` carries `@version` + `@updateURL`, so when Instagram changes its markup and something breaks:
+The app installs and works for **7 days**. When it expires, re-run step 3 (2 minutes), or automate with AltStore/SideStore below.
 
-1. Open the **Userscripts** extension popup.
-2. Tap **Available Updates** (the refresh button) — the new version appears.
-3. Apply it.
+### 4. Enable Developer Mode (iOS 16+)
+**Settings → Privacy & Security → Developer Mode → ON** → iPhone restarts → confirm. Required to run sideloaded apps.
 
-That's it. If Meta has redesigned the site, the fix is shipped in the hosted script; no reinstall needed. If nothing fixes it, open an issue or re-install the script from the raw URL.
+## Never expire it again (optional)
+
+- **AltStore (recommended):** install AltServer on your Mac from <https://altstore.io>, then from the **AltServer menu-bar icon → Install AltStore → your iPhone**. Sign in with your Apple ID inside AltStore. AltStore auto-re-signs `focus` over Wi-Fi while AltServer is running — no replugging.
+- **SideStore:** an AltStore fork that refreshes itself **on-device** (Mac needed only once to pair) — good if your Mac is often off.
+
+## Notifications (Combo A)
+
+The web version has no push notifications, so to keep notifications exactly as before, keep the **native Instagram app installed** and lock it down so it can't be scrolled:
+
+1. Native Instagram: **Settings → Notifications → keep only Messages** (or whatever you want to hear).
+2. **Settings → Screen Time → App Limits → Add Limit → Instagram → 1–5 minutes/day** → enable **Block at Limit**.
+3. Have a friend set a **Screen Time passcode** you don't know (so you can't tap "Ignore Limit").
+
+Notifications arrive exactly as today; the native app just can't be used for scrolling. You reply to DMs inside `focus`.
+
+## How the filtering updates
+
+The app injects `focus.user.js` (bundled) and caches the newest copy from
+`https://raw.githubusercontent.com/AtleyMa/focus/main/focus.user.js`
+on every launch. When Instagram changes its markup:
+
+1. I bump the script in this repo and push.
+2. Your phone fetches it on next launch.
+3. Done — no app rebuild.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Reels / suggestions still visible | Update the script (see above); if already newest, Meta changed markup — report it. |
-| "For You" feed loads | Refresh; `focus` auto-clicks **Following** within ~1.5s. |
-| Script not running at all | Re-check extension permission for `instagram.com` (Settings → Safari → Extensions). |
-| DMs appear in web but you miss pings | Use Combo A to keep native app for Messages notifications only. |
-| Shared reel link opens home page | That's intentional — `/reel/` and `/reels/` redirect to your feed. |
+| App won't install / "Unable to install" | Confirm Developer Mode is on; check Signing team; try USB (not Wi-Fi) |
+| Expired after 7 days | Re-run in Xcode, or set up AltStore/SideStore |
+| Reels / suggestions visible | Force-quit and reopen (fetches latest filter); if still broken, report it — Meta changed the markup |
+| Notifications stop | Combo A not applied yet — keep native IG + Screen Time limit |
+| Login loop in webview | Log in in Safari first (`instagram.com`) so cookies/CSRF get set, then reopen `focus` |
 
----
+## Project layout
 
-## How it works
-
-- **CSS** hides known Reels/Explore entry points (nav, tabs, profile tab) on first paint.
-- **JS** removes Reels posts from the feed, scans text for "Suggested for you"/"Sponsored" labels and removes them (plus the posts attached to them), hides "Open in the Instagram app" banners, redirects `/reel/`, `/reels/`, and `/explore/` to Home, and auto-clicks the **Following** feed tab.
-- A lightweight observer re-scans every 1.5s so lazy-loaded content stays clean while you scroll.
-- **Privacy:** everything runs on your device inside Safari. No data leaves your phone.
+```
+project.yml                # XcodeGen spec → Focus.xcodeproj
+Sources/
+  FocusApp.swift           # app entry, kicks off filter refresh
+  ContentView.swift        # SwiftUI host
+  WebView.swift            # WKWebView → instagram.com, injects filter
+  FocusRules.swift         # loads/caches focus.user.js (remote → bundled)
+  Assets.xcassets/         # app icon
+Supporting/Info.plist
+focus.user.js              # the filter (hosted auto-update source)
+tools/gen_icon.py          # regenerates the app icon
+```
 
 ## License
 
