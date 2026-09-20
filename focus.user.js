@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         focus
 // @namespace    https://github.com/AtleyMa/focus
-// @version      0.1.0
+// @version      0.2.0
 // @description  focus removes Reels, Explore, For You, suggested and sponsored posts from Instagram, leaving only your Following feed, stories and DMs. Runs in Safari (iPhone/macOS) via the Userscripts extension.
 // @author       AtleyMa
 // @match        https://www.instagram.com/*
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.1.0';
+  var VERSION = '0.2.0';
   var DEBUG = false;
 
   function log() {
@@ -63,6 +63,11 @@
 
   var BANNER_RE = /Open (the )?(Instagram )?(app|in the app)|Get the (Instagram )?app|Use the (Instagram )?app|Install the app/;
 
+  function isReelHref(href) {
+    href = (href || '');
+    return href.indexOf('/reel/') === 0 || href.indexOf('/reels/') === 0 || href === '/reels';
+  }
+
   /* ------------------------------------------------------------------
    * 3. Remove Reels posts from the feed (cards that link to /reel/).
    * ------------------------------------------------------------------ */
@@ -75,8 +80,30 @@
   }
 
   /* ------------------------------------------------------------------
-   * 4. Text-node scan — find suggestion dividers, sponsored labels,
-   *    app banners. Cheap: only visits short text nodes.
+   * 4. Remove reel cards anywhere (DMs, search, profile grids): the
+   *    anchor is usually the whole card, so climb a couple of tight
+   *    wrapper levels and drop it, stopping before page-level nodes.
+   * ------------------------------------------------------------------ */
+  function removeReelCards() {
+    var links = document.querySelectorAll('a[href*="/reel/"], a[href*="/reels/"]');
+    for (var i = 0; i < links.length; i++) {
+      var node = links[i];
+      if (!node.parentNode) continue;
+      for (var lvl = 0; lvl < 3; lvl++) {
+        var p = node.parentElement;
+        if (!p) break;
+        if (p === document.body || p === document.documentElement) break;
+        if (p.matches && p.matches('main, [role="main"]')) break;
+        if (p.children.length > 4) break;   /* too big to be the card itself */
+        node = p;
+      }
+      removeEl(node);
+      log('removed reel card');
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * 5. Text-node scan — suggestion dividers, sponsored labels, banners.
    * ------------------------------------------------------------------ */
   function walkText(root) {
     var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -119,7 +146,7 @@
     var t = clean(el.textContent);
 
     var art = el.closest ? el.closest('article') : null;
-    if (art) { removeEl(art); return; }            /* sponsored label or suggested post */
+    if (art) { removeEl(art); return; }
 
     if (BANNER_RE.test(t)) { hideFixedAncestor(el); return; }
 
@@ -129,7 +156,7 @@
   }
 
   /* ------------------------------------------------------------------
-   * 5. Force the "Following" feed instead of "For You".
+   * 6. Force the "Following" feed instead of "For You".
    * ------------------------------------------------------------------ */
   function forceFollowing() {
     var tabs = document.querySelectorAll('[role="tab"], [role="tablist"] a, [role="tablist"] [role="button"]');
@@ -145,7 +172,7 @@
   }
 
   /* ------------------------------------------------------------------
-   * 6. Redirect Reels / Explore routes back to Home.
+   * 7. Redirect Reels / Explore routes back to Home.
    * ------------------------------------------------------------------ */
   function redirectBadRoutes() {
     var p = location.pathname;
@@ -156,8 +183,58 @@
   }
 
   /* ------------------------------------------------------------------
-   * 7. Main loop. Run once, then every 1.5s to catch lazy-loaded
-   *    content, plus on scroll.
+   * 8. Click interceptor — stop reel/explore taps dead (capture phase),
+   *    including cards whose anchor is a descendant of the tap target.
+   * ------------------------------------------------------------------ */
+  document.addEventListener('click', function (e) {
+    var el = e.target;
+    for (var i = 0; i < 8 && el && el !== document; i++) {
+      if (el.tagName === 'A') {
+        if (isReelHref(el.getAttribute('href')) || el.getAttribute('href') === '/explore/') {
+          e.preventDefault();
+          e.stopPropagation();
+          log('blocked reel/explore click');
+          redirectBadRoutes();
+          return;
+        }
+        break;
+      }
+      if (el.querySelector) {
+        var inner = el.querySelector('a[href*="/reel/"], a[href*="/reels/"]');
+        if (inner) {
+          e.preventDefault();
+          e.stopPropagation();
+          log('blocked click on container with reel link');
+          redirectBadRoutes();
+          return;
+        }
+      }
+      el = el.parentElement;
+    }
+  }, true);
+
+  /* ------------------------------------------------------------------
+   * 9. Catch SPA route changes instantly (reel viewer opens via
+   *    pushState without a full page load).
+   * ------------------------------------------------------------------ */
+  (function patchHistory() {
+    var origPush = history.pushState;
+    var origReplace = history.replaceState;
+    history.pushState = function () {
+      var r = origPush.apply(this, arguments);
+      redirectBadRoutes();
+      return r;
+    };
+    history.replaceState = function () {
+      var r = origReplace.apply(this, arguments);
+      redirectBadRoutes();
+      return r;
+    };
+  })();
+  window.addEventListener('popstate', redirectBadRoutes);
+
+  /* ------------------------------------------------------------------
+   * 10. Main loop — run now, then on an interval + scroll.
    * ------------------------------------------------------------------ */
   var timer = null;
 
@@ -165,6 +242,7 @@
     if (document.body) {
       redirectBadRoutes();
       purgeReelPosts();
+      removeReelCards();
       var hits = walkText(document.body);
       for (var i = 0; i < hits.length; i++) handle(hits[i]);
       forceFollowing();
@@ -174,9 +252,8 @@
   function start() {
     injectCSS();
     scan();
-    timer = setInterval(scan, 1500);
+    timer = setInterval(scan, 1000);
     document.addEventListener('scroll', scan, { passive: true });
-    window.addEventListener('popstate', scan);
     log('started v' + VERSION);
   }
 
