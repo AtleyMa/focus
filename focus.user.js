@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         focus
 // @namespace    https://github.com/AtleyMa/focus
-// @version      0.3.0
+// @version      0.4.0
 // @description  focus removes Reels/Explore/For You/suggestions/sponsored from Instagram, forces the Following feed, and locks any reel you open so you can't advance to another. Runs in Safari (iPhone/macOS) via the Userscripts extension.
 // @author       AtleyMa
 // @match        https://www.instagram.com/*
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.3.0';
+  var VERSION = '0.4.0';
   var DEBUG = false;
 
   function log() {
@@ -59,7 +59,15 @@
     'You might like': true,
     'Recommended for you': true,
     'In case you missed it': true,
-    'Because you follow': true
+    'Because you follow': true,
+    /* ads */
+    'Sponsored': true,
+    'Sponsored content': true,
+    'Sponsored post': true,
+    'Promoted': true,
+    'Promoted content': true,
+    'Advertisement': true,
+    'Ad': true
   };
 
   var BANNER_RE = /Open (the )?(Instagram )?(app|in the app)|Get the (Instagram )?app|Use the (Instagram )?app|Install the app/;
@@ -151,14 +159,18 @@
    *    Hard-banned routes (never allowed):
    *        /reels/...  /explore/...
    *    Single-reel viewing (allowed):
-   *        /reel/<id>  — open ONE reel, but the moment the viewer tries
-   *        to advance to any OTHER reel (next or prev), bounce back to
-   *        the original. Leaving to home/feed resets the lock.
+   *        /reel/<id> OR a reel opened as an overlay from DMs.
+   *    "reelActive" is engaged by tapping a reel link OR landing on a
+   *    /reel/ URL, and disengaged when no full-screen video remains.
+   *    While active, vertical swipes on the video are blocked and any
+   *    attempt to advance to a different reel bounces back.
    * ------------------------------------------------------------------ */
   var currentReel = null;
+  var reelActive = false;
   var bounceCooldown = false;
 
   function reelIdFromPath(p) {
+    p = p || '';
     if (p.indexOf('/reel/') !== 0) return null;
     var parts = p.split('/');
     return parts[2] || null;
@@ -174,32 +186,53 @@
     return false;
   }
 
+  function engageReel(id) {
+    currentReel = id;
+    reelActive = true;
+    log('reel lock: watching', id);
+  }
+
+  function disengage() {
+    if (reelActive) log('reel lock: disengaged');
+    currentReel = null;
+    reelActive = false;
+  }
+
+  function bounce(offender) {
+    if (bounceCooldown) return;
+    bounceCooldown = true;
+    log('reel lock: bounce', offender, '->', currentReel);
+    history.back();
+    setTimeout(function () {
+      bounceCooldown = false;
+      var now = reelIdFromPath(location.pathname);
+      if (now && now !== currentReel) {
+        log('reel lock: force back to', currentReel);
+        location.replace('/reel/' + currentReel);
+      }
+    }, 900);
+  }
+
+  /* A full-screen-ish playing video = an open viewer (reel overlay). */
+  function hasFullscreenVideo() {
+    var vids = document.querySelectorAll('video');
+    for (var i = 0; i < vids.length; i++) {
+      var r = vids[i].getBoundingClientRect();
+      if (r.width >= window.innerWidth * 0.8 && r.height >= window.innerHeight * 0.8) return true;
+    }
+    return false;
+  }
+
   function handleNavigation() {
-    if (hardRedirect()) { currentReel = null; return; }
+    if (hardRedirect()) { disengage(); return; }
 
     var id = reelIdFromPath(location.pathname);
     if (id) {
-      if (currentReel === null) {
-        currentReel = id;
-        log('reel lock: watching', id);
-      } else if (id !== currentReel) {
-        if (!bounceCooldown) {
-          bounceCooldown = true;
-          log('reel lock: bounce', id, '->', currentReel);
-          history.back();
-          setTimeout(function () {
-            bounceCooldown = false;
-            var now = reelIdFromPath(location.pathname);
-            if (now && now !== currentReel) {
-              log('reel lock: force back to', currentReel);
-              location.replace('/reel/' + currentReel);
-            }
-          }, 900);
-        }
-      }
+      if (currentReel === null) engageReel(id);
+      else if (id !== currentReel) bounce(id);
       hideReelControls();
     } else {
-      currentReel = null;
+      if (reelActive && !hasFullscreenVideo()) disengage();
     }
   }
 
@@ -219,20 +252,38 @@
     }
   }
 
-  /* Best-effort: block vertical swipes on the reel video while a reel is
-   * open, so swipe-to-advance can't even start. */
-  document.addEventListener('touchmove', function (e) {
-    if (reelIdFromPath(location.pathname) === null) return;
+  /* Engage reel mode when a reel link is tapped (DM overlay case). */
+  document.addEventListener('click', function (e) {
+    if (reelActive) return;
     var target = e.target;
     if (!target || !target.closest) return;
-    if (target.closest('video')) {
-      e.preventDefault();
+    var a = target.closest('a');
+    if (a) {
+      var id = reelIdFromPath(a.getAttribute('href') || '');
+      if (id) { engageReel(id); return; }
+      return; /* an anchor that isn't a reel — ignore */
     }
+    var el = target;
+    for (var i = 0; i < 3 && el && el.querySelector; i++) {
+      var inner = el.querySelector('a[href*="/reel/"]');
+      if (inner) {
+        var id2 = reelIdFromPath(inner.getAttribute('href') || '');
+        if (id2) { engageReel(id2); return; }
+      }
+      el = el.parentElement;
+    }
+  }, true);
+
+  /* Block vertical swipes on the video while a reel is being viewed. */
+  document.addEventListener('touchmove', function (e) {
+    if (!reelActive) return;
+    var target = e.target;
+    if (!target || !target.closest) return;
+    if (target.closest('video')) e.preventDefault();
   }, { passive: false, capture: true });
 
   /* ------------------------------------------------------------------
-   * 7. Catch SPA route changes instantly (reel viewer navigation happens
-   *    via pushState/replaceState without a full page load).
+   * 7. Catch SPA route changes instantly.
    * ------------------------------------------------------------------ */
   (function patchHistory() {
     var origPush = history.pushState;
@@ -262,6 +313,7 @@
     var hits = walkText(document.body);
     for (var i = 0; i < hits.length; i++) handle(hits[i]);
     forceFollowing();
+    if (reelActive) hideReelControls();
   }
 
   function start() {
